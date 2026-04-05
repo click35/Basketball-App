@@ -596,9 +596,9 @@ async function submitSetup(){
   const username=document.getElementById('inUsername').value.trim();
   if(!username){showErr('setupErr','Enter your name to continue.');return;}
   showErr('setupErr','');
-  // Check if username taken
+  // Check if username taken (but not by this device)
   const existing=await db.collection('users').where('username','==',username).limit(1).get();
-  if(!existing.empty){showErr('setupErr','That name is taken — try another!');return;}
+  if(!existing.empty&&existing.docs[0].id!==S.uid){showErr('setupErr','That name is taken — try another!');return;}
   S.uid=uuid();
   localStorage.setItem('hl_uid',S.uid);
   const userData={
@@ -727,27 +727,30 @@ function cleanup(){unsubs.forEach(u=>u());unsubs.length=0;}
 async function init(){
   S.uid=localStorage.getItem('hl_uid');
   if(!S.uid){showScreen('s-setup');return;}
-  // Load existing user
-  const userDoc=await db.collection('users').doc(S.uid).get();
-  if(!userDoc.exists){localStorage.removeItem('hl_uid');showScreen('s-setup');return;}
-  S.user={id:S.uid,...userDoc.data()};
-  if(S.user.squadId){
-    const squadDoc=await db.collection('squads').doc(S.user.squadId).get();
-    if(squadDoc.exists)S.squad={id:squadDoc.id,...squadDoc.data()};
-  }
-  enterApp();
-  // If no squad, show squad setup
-  if(!S.user.squadId){
-    if(S.user.role==='coach'){
-      document.getElementById('coachSquadForm').style.display='block';
-      document.getElementById('playerSquadForm').style.display='none';
+  try{
+    const userDoc=await db.collection('users').doc(S.uid).get();
+    if(!userDoc.exists){localStorage.removeItem('hl_uid');showScreen('s-setup');return;}
+    S.user={id:S.uid,...userDoc.data()};
+    if(S.user.squadId){
+      const squadDoc=await db.collection('squads').doc(S.user.squadId).get();
+      if(squadDoc.exists)S.squad={id:squadDoc.id,...squadDoc.data()};
+      enterApp();
     } else {
-      document.getElementById('coachSquadForm').style.display='none';
-      document.getElementById('playerSquadForm').style.display='block';
+      enterApp();
+      if(S.user.role==='coach'){
+        document.getElementById('coachSquadForm').style.display='block';
+        document.getElementById('playerSquadForm').style.display='none';
+        document.getElementById('squadHeading').textContent='Create your squad';
+      } else {
+        document.getElementById('coachSquadForm').style.display='none';
+        document.getElementById('playerSquadForm').style.display='block';
+        document.getElementById('squadHeading').textContent='Join your squad';
+      }
+      showScreen('s-squad');
     }
-    showScreen('s-squad');
-  }
+  }catch(e){console.error('Init error',e);showScreen('s-setup');}
 }
+function resetApp(){localStorage.removeItem('hl_uid');location.reload();}
 
 // ── HEADER / XP ──────────────────────────────────────────
 function refreshHeader(){
